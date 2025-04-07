@@ -41,48 +41,21 @@ checksum:
       name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
   name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
   algorithm: sha256
-publishers:
-  - name: upload
-    checksum: true
-    extra_files:
-      - glob: 'terraform-registry-manifest.json'
-        name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
-    signature: true
-    env:
-      - HC_RELEASES_HOST={{ .Env.HC_RELEASES_HOST }}
-      - HC_RELEASES_KEY={{ .Env.HC_RELEASES_KEY }}
-    cmd: |
-      hc-releases upload -product {{ .ProjectName }} -version {{ .Version }} -file={{ .ArtifactPath }}={{ .ArtifactName }} -header="x-terraform-protocol-version=5.0" -header="x-terraform-protocol-versions=5.0"
 release:
   extra_files:
     - glob: 'terraform-registry-manifest.json'
       name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
-  ids:
-    - none
 signs:
-  # Default Signature file (i.e. terraform-provider-NAME_VERSION_SHA256SUMS.sig)
-  - cmd: sh
+  - artifacts: checksum
     args:
-    - -c
-    - >-
-      signore
-      sign
-      --dearmor
-      --file ${artifact}
-      --out ${signature}
-    artifacts: checksum
-  # Signature file with GPG Public Key ID in filename (i.e. terraform-provider-NAME_VERSION_SHA256SUMS.7685B676.sig)
-  - id: sig-with-gpg-public-key-id
-    signature: ${artifact}.72D7468F.sig
-    cmd: sh
-    args:
-    - -c
-    - >-
-      signore
-      sign
-      --dearmor
-      --file ${artifact}
-      --out ${signature}
-    artifacts: checksum
+      # if you are using this in a GitHub action or some other automated pipeline, you
+      # need to pass the batch flag to indicate its not interactive.
+      - "--batch"
+      - "--local-user"
+      - "{{ .Env.GPG_FINGERPRINT }}" # set this environment variable for your signing key
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
 snapshot:
   name_template: "{{ .Tag }}-next"
