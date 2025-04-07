@@ -62,3 +62,6 @@ release:
 
 changelog:
   disable: true
+
+snapshot:
+  name_template: "{{ .Version }}-next"
