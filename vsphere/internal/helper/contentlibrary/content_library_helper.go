@@ -161,6 +161,29 @@ func IsContentLibraryItem(c *rest.Client, id string) bool {
 	return item != nil
 }
 
+func RemoveExistingItem(c *rest.Client, l *library.Library, name string) error {
+	log.Printf("[DEBUG] contentlibrary.RemoveExistingItem: Remove library item %s.", name)
+	clm := library.NewManager(c)
+	ctx := context.TODO()
+	fi := library.FindItem{
+		LibraryID: l.ID,
+		Name:      name,
+	}
+	items, err := clm.FindLibraryItems(ctx, fi)
+	if err != nil {
+		return provider.Error(name, "RemoveExistingItem", err)
+	}
+	if len(items) < 1 {
+		return nil
+	}
+	item, err := clm.GetLibraryItem(ctx, items[0])
+	if err != nil {
+		return provider.Error(name, "RemoveExistingItem", err)
+	}
+	err = clm.DeleteLibraryItem(ctx, item)
+	return err
+}
+
 // CreateLibraryItem creates an item in a Content Library.
 func CreateLibraryItem(c *rest.Client, l *library.Library, name string, desc string, t string, file string, moid string) (*string, error) {
 	log.Printf("[DEBUG] contentlibrary.CreateLibraryItem: Creating content library item %s.", name)

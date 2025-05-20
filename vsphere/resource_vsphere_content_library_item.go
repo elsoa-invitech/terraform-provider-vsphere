@@ -68,6 +68,13 @@ func resourceVSphereContentLibraryItem() *schema.Resource {
 				Description:   "The managed object ID of an existing VM to be cloned to the content library.",
 				ConflictsWith: []string{"file_url"},
 			},
+			"remove_existing": {
+				Type:        schema.TypeBool,
+				Optional:    true,
+				ForceNew:    true,
+				Default:     false,
+				Description: "Remove existing content library item.",
+			},
 		},
 	}
 }
@@ -114,6 +121,13 @@ func resourceVSphereContentLibraryItemCreate(d *schema.ResourceData, meta interf
 	lib, err := contentlibrary.FromID(rc, d.Get("library_id").(string))
 	if err != nil {
 		return err
+	}
+
+	if d.Get("remove_existing").(bool) {
+		err = contentlibrary.RemoveExistingItem(rc, lib, d.Get("name").(string))
+		if err != nil {
+			return err
+		}
 	}
 	var moid virtualmachine.MOIDForUUIDResult
 	if uuid, ok := d.GetOk("source_uuid"); ok {
