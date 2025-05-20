@@ -461,6 +461,7 @@ func (uploadSession libraryUploadSession) upload(name string, file *io.Reader, s
 	p := soap.DefaultUpload
 	p.ContentLength = size
 	u, err := url.Parse(update.UploadEndpoint.URI)
+	u.Host = uploadSession.ContentLibraryManager.URL().Host
 	if err != nil {
 		return err
 	}
