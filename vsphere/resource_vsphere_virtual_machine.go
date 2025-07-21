@@ -43,13 +43,13 @@ import (
 // rollback fails on a post-clone virtual machine operation.
 const formatVirtualMachinePostCloneRollbackError = `warning:
 
-There was an error performing post-clone changes to virtual machine %q: %s. 
+There was an error performing post-clone changes to virtual machine %q: %s.
 
-Additionally, there was an error removing the cloned virtual machine: %s. 
+Additionally, there was an error removing the cloned virtual machine: %s.
 
-The virtual machine may still exist in state. 
+The virtual machine may still exist in state.
 
-If it does, the resource will need to be tainted before trying again. 
+If it does, the resource will need to be tainted before trying again.
 
 If the virtual machine does not exist in state, manually delete it to try again
 
@@ -325,7 +325,6 @@ func resourceVSphereVirtualMachine() *schema.Resource {
 			State: resourceVSphereVirtualMachineImport,
 		},
 		SchemaVersion: 3,
-		MigrateState:  resourceVSphereVirtualMachineMigrateState,
 		Schema:        s,
 	}
 }
@@ -439,7 +438,8 @@ func resourceVSphereVirtualMachineRead(d *schema.ResourceData, meta interface{})
 	id := d.Id()
 	vm, err := virtualmachine.FromUUID(client, id)
 	if err != nil {
-		if _, ok := err.(*virtualmachine.UUIDNotFoundError); ok {
+		var notFoundError *virtualmachine.UUIDNotFoundError
+		if errors.As(err, &notFoundError) {
 			log.Printf("[DEBUG] %s: Virtual machine not found, marking resource as gone: %s", resourceVSphereVirtualMachineIDString(d), err)
 			d.SetId("")
 			return nil
@@ -537,7 +537,7 @@ func resourceVSphereVirtualMachineRead(d *schema.ResourceData, meta interface{})
 				return fmt.Errorf("could not read managed object reference (datastore cluster): %s", dsProps.Parent.Value)
 			}
 
-			d.Set("datastore_cluster_id", cluster.Reference().Value)
+			_ = d.Set("datastore_cluster_id", cluster.Reference().Value)
 		}
 
 	}
@@ -553,7 +553,7 @@ func resourceVSphereVirtualMachineRead(d *schema.ResourceData, meta interface{})
 		if err != nil {
 			return err
 		}
-		d.Set("storage_policy_id", polID)
+		_ = d.Set("storage_policy_id", polID)
 	}
 
 	// Read the virtual machine PCI passthrough devices
@@ -615,11 +615,11 @@ func resourceVSphereVirtualMachineRead(d *schema.ResourceData, meta interface{})
 	// Get the power state for the virtual machine.
 	switch vprops.Runtime.PowerState {
 	case types.VirtualMachinePowerStatePoweredOn:
-		d.Set("power_state", "on")
+		_ = d.Set("power_state", "on")
 	case types.VirtualMachinePowerStatePoweredOff:
-		d.Set("power_state", "off")
+		_ = d.Set("power_state", "off")
 	case types.VirtualMachinePowerStateSuspended:
-		d.Set("power_state", "suspended")
+		_ = d.Set("power_state", "suspended")
 	}
 
 	// Set the virtual Trusted Platform Module device for the virtual machine.
@@ -751,18 +751,6 @@ func resourceVSphereVirtualMachineUpdate(d *schema.ResourceData, meta interface{
 	devices := object.VirtualDeviceList(vprops.Config.Hardware.Device)
 	if spec.DeviceChange, err = applyVirtualDevices(d, client, devices); err != nil {
 		return err
-	}
-
-	if d.HasChange("vtpm") {
-
-		spec.DeviceChange = append(spec.DeviceChange, &types.VirtualDeviceConfigSpec{
-			Operation: types.VirtualDeviceConfigSpecOperationAdd,
-			Device: &types.VirtualTPM{
-				VirtualDevice: types.VirtualDevice{
-					Key: -1,
-				},
-			},
-		})
 	}
 
 	// Only carry out the reconfigure if we actually have a change to process.
@@ -983,29 +971,6 @@ func resourceVSphereVirtualMachineCustomizeDiff(_ context.Context, d *schema.Res
 	log.Printf("[DEBUG] %s: Performing diff customization and validation", resourceVSphereVirtualMachineIDString(d))
 	client := meta.(*Client).vimClient
 
-	version := viapi.ParseVersionFromClient(client)
-
-	// Minimum Supported Version: 6.5.0
-	if d.Get("efi_secure_boot_enabled").(bool) {
-		if version.Older(viapi.VSphereVersion{Product: version.Product, Major: 6, Minor: 5}) {
-			return fmt.Errorf("efi_secure_boot_enabled is only supported on vSphere 6.5 and higher")
-		}
-	}
-
-	// Minimum Supported Version: 6.7.0
-	if d.Get("vbs_enabled").(bool) {
-		if version.Older(viapi.VSphereVersion{Product: version.Product, Major: 6, Minor: 7}) {
-			return fmt.Errorf("vbs_enabled is only supported on vSphere 6.7 and higher")
-		}
-	}
-
-	// Minimum Supported Version: 6.7.0
-	if d.Get("vvtd_enabled").(bool) {
-		if version.Older(viapi.VSphereVersion{Product: version.Product, Major: 6, Minor: 7}) {
-			return fmt.Errorf("vvtd_enabled is only supported on vSphere 6.7 and higher")
-		}
-	}
-
 	if len(d.Get("ovf_deploy").([]interface{})) == 0 && len(d.Get("network_interface").([]interface{})) == 0 {
 		return fmt.Errorf("network_interface parameter is required when not deploying from ovf template")
 	}
@@ -1088,9 +1053,8 @@ func resourceVSphereVirtualMachineCustomizeDiff(_ context.Context, d *schema.Res
 			// For most cases (all non-imported workflows), any changed attribute in
 			// the clone configuration namespace is a ForceNew. Flag those now.
 			for _, k := range d.GetChangedKeysPrefix("clone.0") {
-				if strings.HasSuffix(k, ".#") {
-					k = strings.TrimSuffix(k, ".#")
-				}
+				k = strings.TrimSuffix(k, ".#")
+
 				// To maintain consistency with other timeout options, timeout does not
 				// need to ForceNew
 				if k == "clone.0.timeout" {
@@ -1249,7 +1213,7 @@ func resourceVSphereVirtualMachineImport(d *schema.ResourceData, meta interface{
 	// Validate the disks in the VM to make sure that they will work with the
 	// resource. This is mainly ensuring that all disks are SCSI disks, but a
 	// Read operation is attempted as well to make sure it will survive that.
-	if err := virtualdevice.DiskImportOperation(d, object.VirtualDeviceList(props.Config.Hardware.Device)); err != nil {
+	if err := virtualdevice.DiskImportOperation(d, props.Config.Hardware.Device); err != nil {
 		return nil, err
 	}
 	// The VM should be ready for reading now
@@ -1425,17 +1389,6 @@ func resourceVSphereVirtualMachineCreateBareStandard(
 	}
 	spec.Files = &types.VirtualMachineFileInfo{
 		VmPathName: fmt.Sprintf("[%s]", ds.Name()),
-	}
-
-	if vtpms, ok := d.GetOk("vtpm"); ok && len(vtpms.([]interface{})) > 0 {
-		spec.DeviceChange = append(spec.DeviceChange, &types.VirtualDeviceConfigSpec{
-			Operation: types.VirtualDeviceConfigSpecOperationAdd,
-			Device: &types.VirtualTPM{
-				VirtualDevice: types.VirtualDevice{
-					Key: -1,
-				},
-			},
-		})
 	}
 
 	timeout := meta.(*Client).timeout
@@ -1658,7 +1611,7 @@ func resourceVSphereVirtualMachinePostDeployChanges(d *schema.ResourceData, meta
 			fmt.Errorf("error in virtual machine configuration: %s", err),
 		)
 	}
-	devices, delta, err = virtualdevice.NormalizeBus(devices, d) //nolint:ineffassign
+	devices, delta, err = virtualdevice.NormalizeBus(devices, d) //nolint
 	if err != nil {
 		return resourceVSphereVirtualMachineRollbackCreate(
 			d,
@@ -1717,7 +1670,7 @@ func resourceVSphereVirtualMachinePostDeployChanges(d *schema.ResourceData, meta
 			fmt.Errorf("error in virtual machine configuration: %s", err),
 		)
 	}
-	devices = object.VirtualDeviceList(vprops.Config.Hardware.Device)
+	devices = vprops.Config.Hardware.Device
 
 	// Disks
 	devices, delta, err = virtualdevice.DiskPostCloneOperation(d, client, devices, postOvf)
@@ -1730,6 +1683,52 @@ func resourceVSphereVirtualMachinePostDeployChanges(d *schema.ResourceData, meta
 		)
 	}
 	cfgSpec.DeviceChange = virtualdevice.AppendDeviceChangeSpec(cfgSpec.DeviceChange, delta...)
+
+	// Apply SDRS if new disks are being added
+	if d.Get("datastore_cluster_id").(string) != "" && len(delta) > 0 {
+		log.Printf("[DEBUG] %s: Reconfiguring virtual machine through Storage DRS API", resourceVSphereVirtualMachineIDString(d))
+		pod, err := storagepod.FromID(client, d.Get("datastore_cluster_id").(string))
+		if err != nil {
+			return resourceVSphereVirtualMachineRollbackCreate(
+				d,
+				meta,
+				vm,
+				fmt.Errorf("error processing disk changes post-clone: %s", err),
+			)
+		}
+
+		err = storagepod.ReconfigureVM(client, vm, cfgSpec, pod)
+		if err != nil {
+			return resourceVSphereVirtualMachineRollbackCreate(
+				d,
+				meta,
+				vm,
+				fmt.Errorf("error processing disk changes post-clone: %s", err),
+			)
+		}
+
+		// Disks already added via DRS, remove from DeviceChange
+		for _, disk := range delta {
+			var index = -1
+			if disk.GetVirtualDeviceConfigSpec() != nil &&
+				disk.GetVirtualDeviceConfigSpec().Device.GetVirtualDevice() != nil {
+				diskKey := disk.GetVirtualDeviceConfigSpec().Device.GetVirtualDevice().Key
+				for i, device := range cfgSpec.DeviceChange {
+					if device.GetVirtualDeviceConfigSpec() != nil &&
+						device.GetVirtualDeviceConfigSpec().Device.GetVirtualDevice() != nil {
+						if diskKey == device.GetVirtualDeviceConfigSpec().Device.GetVirtualDevice().Key {
+							index = i
+						}
+					}
+				}
+			}
+
+			if index > -1 {
+				cfgSpec.DeviceChange = append(cfgSpec.DeviceChange[:index], cfgSpec.DeviceChange[index+1:]...)
+			}
+		}
+	}
+
 	// Network devices
 	devices, delta, err = virtualdevice.NetworkInterfacePostCloneOperation(d, client, devices)
 	if err != nil {
@@ -1760,6 +1759,18 @@ func resourceVSphereVirtualMachinePostDeployChanges(d *schema.ResourceData, meta
 			meta,
 			vm,
 			fmt.Errorf("error processing PCI passthrough device changes post-clone: %s", err),
+		)
+	}
+	cfgSpec.DeviceChange = virtualdevice.AppendDeviceChangeSpec(cfgSpec.DeviceChange, delta...)
+
+	// VTPM
+	devices, delta, err = virtualdevice.VtpmApplyOperation(d, devices)
+	if err != nil {
+		return resourceVSphereVirtualMachineRollbackCreate(
+			d,
+			meta,
+			vm,
+			fmt.Errorf("error processing VTPM device changes post-clone: %s", err),
 		)
 	}
 	cfgSpec.DeviceChange = virtualdevice.AppendDeviceChangeSpec(cfgSpec.DeviceChange, delta...)
@@ -2063,6 +2074,13 @@ func applyVirtualDevices(d *schema.ResourceData, c *govmomi.Client, l object.Vir
 	spec = virtualdevice.AppendDeviceChangeSpec(spec, delta...)
 	// PCI passthrough devices
 	l, delta, err = virtualdevice.PciPassthroughApplyOperation(d, c, l)
+	if err != nil {
+		return nil, err
+	}
+	spec = virtualdevice.AppendDeviceChangeSpec(spec, delta...)
+
+	// VTPM
+	l, delta, err = virtualdevice.VtpmApplyOperation(d, l)
 	if err != nil {
 		return nil, err
 	}

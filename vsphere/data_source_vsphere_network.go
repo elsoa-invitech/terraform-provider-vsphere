@@ -5,6 +5,7 @@
 package vsphere
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -46,6 +47,11 @@ func dataSourceVSphereNetwork() *schema.Resource {
 				Description: "Id of the distributed virtual switch of which the port group is a part of",
 				Optional:    true,
 			},
+			"vpc_id": {
+				Type:        schema.TypeString,
+				Description: "Id of the VPC which the network belongs to",
+				Optional:    true,
+			},
 			"filter": {
 				Type:        schema.TypeSet,
 				Description: "Apply a filter for the discovered network.",
@@ -56,7 +62,7 @@ func dataSourceVSphereNetwork() *schema.Resource {
 							Type:         schema.TypeString,
 							Description:  "The type of the network (e.g., Network, DistributedVirtualPortgroup, OpaqueNetwork)",
 							Optional:     true,
-							ValidateFunc: validation.StringInSlice(network.NetworkType, false),
+							ValidateFunc: validation.StringInSlice(network.Type, false),
 						},
 					},
 				},
@@ -82,6 +88,7 @@ func dataSourceVSphereNetworkRead(d *schema.ResourceData, meta interface{}) erro
 
 	name := d.Get("name").(string)
 	dvSwitchUUID := d.Get("distributed_virtual_switch_uuid").(string)
+	vpcID := d.Get("vpc_id").(string)
 	var dc *object.Datacenter
 	if dcID, ok := d.GetOk("datacenter_id"); ok {
 		var err error
@@ -111,7 +118,20 @@ func dataSourceVSphereNetworkRead(d *schema.ResourceData, meta interface{}) erro
 			// Handle distributed virtual switch port group
 			net, err = network.FromNameAndDVSUuid(client, name, dc, dvSwitchUUID)
 			if err != nil {
-				if _, ok := err.(network.NotFoundError); ok {
+				var notFoundError *network.NotFoundError
+				if errors.As(err, &notFoundError) {
+					return struct{}{}, waitForNetworkPending, nil
+				}
+
+				return struct{}{}, waitForNetworkError, err
+			}
+			return net, waitForNetworkCompleted, nil
+		} else if vpcID != "" {
+			// Handle VPC network
+			net, err = network.FromNameAndVPCId(client, name, dc, vpcID)
+			if err != nil {
+				var notFoundError *network.NotFoundError
+				if errors.As(err, &notFoundError) {
 					return struct{}{}, waitForNetworkPending, nil
 				}
 
@@ -122,7 +142,8 @@ func dataSourceVSphereNetworkRead(d *schema.ResourceData, meta interface{}) erro
 		// Handle standard switch port group
 		net, err = network.FromName(vimClient, name, dc, filters) // Pass the *vim25.Client
 		if err != nil {
-			if _, ok := err.(network.NotFoundError); ok {
+			var notFoundError *network.NotFoundError
+			if errors.As(err, &notFoundError) {
 				return struct{}{}, waitForNetworkPending, nil
 			}
 			return struct{}{}, waitForNetworkError, err

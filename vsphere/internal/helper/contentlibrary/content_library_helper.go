@@ -393,7 +393,12 @@ func (uploadSession libraryUploadSession) uploadOvaDisksFromLocal(ovaFilePath st
 }
 
 func (uploadSession libraryUploadSession) uploadOvaDisksFromURL(ovfFilePath string, diskName string, size int64) error {
-	resp, err := http.Get(ovfFilePath)
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", ovfFilePath, nil)
+	if err != nil {
+		return fmt.Errorf("error creating request for %s: %w", ovfFilePath, err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("error performing GET request to %s: %w", ovfFilePath, err)
 	}
@@ -484,7 +489,7 @@ func DeleteLibraryItem(c *rest.Client, item *library.Item) error {
 // ExpandStorageBackings takes ResourceData, and returns a list of StorageBackings.
 func ExpandStorageBackings(c *govmomi.Client, d *schema.ResourceData) ([]library.StorageBacking, error) {
 	log.Printf("[DEBUG] contentlibrary.ExpandStorageBackings: Expanding OVF storage backing.")
-	sb := []library.StorageBacking{}
+	var sb []library.StorageBacking
 	for _, dsID := range d.Get("storage_backing").(*schema.Set).List() {
 		ds, err := datastore.FromID(c, dsID.(string))
 		if err != nil {
@@ -533,7 +538,7 @@ func FlattenSubscription(d *schema.ResourceData, subscription *library.Subscript
 // FlattenStorageBackings takes a list of StorageBackings, and returns a list of datastore IDs.
 func FlattenStorageBackings(d *schema.ResourceData, sb []library.StorageBacking) error {
 	log.Printf("[DEBUG] contentlibrary.FlattenStorageBackings: Flattening OVF storage backing.")
-	sbl := []string{}
+	var sbl []string
 	for _, backing := range sb {
 		if backing.Type == "DATASTORE" {
 			sbl = append(sbl, backing.DatastoreID)
@@ -545,7 +550,7 @@ func FlattenStorageBackings(d *schema.ResourceData, sb []library.StorageBacking)
 
 // MapNetworkDevices maps NICs defined in the OVF to networks..
 func MapNetworkDevices(d *schema.ResourceData) []vcenter.NetworkMapping {
-	nm := []vcenter.NetworkMapping{}
+	var nm []vcenter.NetworkMapping
 	nics := d.Get("network_interface").([]interface{})
 	for _, di := range nics {
 		dm := di.(map[string]interface{})["ovf_mapping"].(string)

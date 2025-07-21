@@ -18,7 +18,6 @@ func TestAccDataSourceVSphereNetwork_dvsPortgroup(t *testing.T) {
 		PreCheck: func() {
 			RunSweepers()
 			testAccPreCheck(t)
-			testAccDataSourceVSphereNetworkPreCheck(t)
 			testAccSkipIfEsxi(t)
 		},
 		Providers: testAccProviders,
@@ -42,7 +41,6 @@ func TestAccDataSourceVSphereNetwork_withTimeout(t *testing.T) {
 		PreCheck: func() {
 			RunSweepers()
 			testAccPreCheck(t)
-			testAccDataSourceVSphereNetworkPreCheck(t)
 			testAccSkipIfEsxi(t)
 		},
 		Providers: testAccProviders,
@@ -66,7 +64,6 @@ func TestAccDataSourceVSphereNetwork_absolutePathNoDatacenter(t *testing.T) {
 		PreCheck: func() {
 			RunSweepers()
 			testAccPreCheck(t)
-			testAccDataSourceVSphereNetworkPreCheck(t)
 			testAccSkipIfEsxi(t)
 		},
 		Providers: testAccProviders,
@@ -90,7 +87,6 @@ func TestAccDataSourceVSphereNetwork_hostPortgroups(t *testing.T) {
 		PreCheck: func() {
 			RunSweepers()
 			testAccPreCheck(t)
-			testAccDataSourceVSphereNetworkPreCheck(t)
 		},
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
@@ -104,12 +100,6 @@ func TestAccDataSourceVSphereNetwork_hostPortgroups(t *testing.T) {
 	})
 }
 
-func testAccDataSourceVSphereNetworkPreCheck(t *testing.T) {
-	if os.Getenv("TF_VAR_VSPHERE_PG_NAME") == "" {
-		t.Skip("set TF_VAR_VSPHERE_PG_NAME to run vsphere_network acceptance tests")
-	}
-}
-
 func testAccDataSourceVSphereNetworkConfigDVSPortgroup(withTimeout bool) string {
 	additionalConfig := ""
 	if withTimeout {
@@ -120,22 +110,21 @@ func testAccDataSourceVSphereNetworkConfigDVSPortgroup(withTimeout bool) string 
 
 resource "vsphere_distributed_virtual_switch" "dvs" {
   name          = "testacc-dvs"
-  datacenter_id = "${data.vsphere_datacenter.rootdc1.id}"
+  datacenter_id = data.vsphere_datacenter.rootdc1.id
 }
 
 resource "vsphere_distributed_port_group" "pg" {
   name                            = "terraform-test-pg"
-  distributed_virtual_switch_uuid = "${vsphere_distributed_virtual_switch.dvs.id}"
+  distributed_virtual_switch_uuid = vsphere_distributed_virtual_switch.dvs.id
 }
 
 data "vsphere_network" "net" {
-  name          = "${vsphere_distributed_port_group.pg.name}"
-  datacenter_id = "${data.vsphere_datacenter.rootdc1.id}"
-  distributed_virtual_switch_uuid = "${vsphere_distributed_virtual_switch.dvs.id}"
+  name                            = vsphere_distributed_port_group.pg.name
+  datacenter_id                   = data.vsphere_datacenter.rootdc1.id
+  distributed_virtual_switch_uuid = vsphere_distributed_virtual_switch.dvs.id
   %s
 }
-`,
-		testhelper.CombineConfigs(testhelper.ConfigDataRootDC1(), testhelper.ConfigDataRootPortGroup1()), additionalConfig)
+`, testhelper.CombineConfigs(testhelper.ConfigDataRootDC1(), testhelper.ConfigDataRootPortGroup1()), additionalConfig)
 }
 
 func testAccDataSourceVSphereNetworkConfigDVSPortgroupAbsolute() string {
@@ -144,19 +133,18 @@ func testAccDataSourceVSphereNetworkConfigDVSPortgroupAbsolute() string {
 
 resource "vsphere_distributed_virtual_switch" "dvs" {
   name          = "testacc-dvs"
-  datacenter_id = "${data.vsphere_datacenter.rootdc1.id}"
+  datacenter_id = data.vsphere_datacenter.rootdc1.id
 }
 
 resource "vsphere_distributed_port_group" "pg" {
   name                            = "terraform-test-pg"
-  distributed_virtual_switch_uuid = "${vsphere_distributed_virtual_switch.dvs.id}"
+  distributed_virtual_switch_uuid = vsphere_distributed_virtual_switch.dvs.id
 }
 
 data "vsphere_network" "net" {
-  name          = "/${data.vsphere_datacenter.rootdc1.name}/network/${vsphere_distributed_port_group.pg.name}"
+  name = "/${data.vsphere_datacenter.rootdc1.name}/network/${vsphere_distributed_port_group.pg.name}"
 }
-`,
-		testhelper.CombineConfigs(testhelper.ConfigDataRootDC1(), testhelper.ConfigDataRootPortGroup1()),
+`, testhelper.CombineConfigs(testhelper.ConfigDataRootDC1(), testhelper.ConfigDataRootPortGroup1()),
 	)
 }
 
@@ -166,4 +154,33 @@ func testAccDataSourceVSphereNetworkConfigHostPortgroup() string {
 `,
 		testhelper.CombineConfigs(testhelper.ConfigDataRootDC1(), testhelper.ConfigDataRootPortGroup1(), testhelper.ConfigDataRootHost1(), testhelper.ConfigDataRootVMNet()),
 	)
+}
+
+func testAccDataSourceVSphereNetworkConfigVPCNetwork() string {
+	return fmt.Sprintf(`
+%s
+`,
+		testhelper.CombineConfigs(testhelper.ConfigDataRootDC1(), testhelper.ConfigDataVPCNetwork(), testhelper.ConfigDataRootVMNet()),
+	)
+}
+
+func TestAccDataSourceVSphereNetwork_vpcNetwork(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			RunSweepers()
+			testAccPreCheck(t)
+			if os.Getenv("TF_VAR_VSPHERE_VPC_SUBNET") == "" || os.Getenv("TF_VAR_VSPHERE_VPC_ID") == "" {
+				t.Skipf("This test requires VPC settings, please set TF_VAR_VSPHERE_VPC_SUBNET and TF_VAR_VSPHERE_VPC_ID environment variables")
+			}
+		},
+		Providers: testAccProviders,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccDataSourceVSphereNetworkConfigVPCNetwork(),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("data.vsphere_network.vmnet", "type", "Network"),
+				),
+			},
+		},
+	})
 }

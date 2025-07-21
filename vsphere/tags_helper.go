@@ -107,7 +107,7 @@ func tagCategoryByName(tm *tags.Manager, name string) (string, error) {
 		return "", fmt.Errorf("could not get category for name %q: %s", name, err)
 	}
 
-	cats := []*tags.Category{}
+	var cats []*tags.Category
 	for i, cat := range allCats {
 		if cat.Name == name {
 			cats = append(cats, &allCats[i])
@@ -136,7 +136,7 @@ func tagByName(tm *tags.Manager, name, categoryID string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultAPITimeout)
 	defer cancel()
 	allTags, err := tm.GetTagsForCategory(ctx, categoryID)
-	tagList := []*tags.Tag{}
+	var tagList []*tags.Tag
 	if err != nil {
 		return "", fmt.Errorf("could not get tag for name %q: %s", name, err)
 	}
@@ -241,14 +241,14 @@ func (p *tagDiffProcessor) diff(a, b []string) []string {
 func (p *tagDiffProcessor) processAttachOperations() error {
 	tagIDs := p.diffNewOld()
 	if len(tagIDs) < 1 {
-		// Nothing to do
 		return nil
 	}
 	for _, tagID := range tagIDs {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultAPITimeout)
-		defer cancel()
 		log.Printf("[DEBUG] Attaching tag %q for object %q", tagID, p.subject.Reference().Value)
-		if err := p.manager.AttachTag(ctx, tagID, p.subject); err != nil {
+		err := p.manager.AttachTag(ctx, tagID, p.subject)
+		cancel()
+		if err != nil {
 			return err
 		}
 	}
@@ -260,14 +260,14 @@ func (p *tagDiffProcessor) processAttachOperations() error {
 func (p *tagDiffProcessor) processDetachOperations() error {
 	tagIDs := p.diffOldNew()
 	if len(tagIDs) < 1 {
-		// Nothing to do
 		return nil
 	}
 	for _, tagID := range tagIDs {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultAPITimeout)
-		defer cancel()
 		log.Printf("[DEBUG] Detaching tag %q for object %q", tagID, p.subject.Reference().Value)
-		if err := p.manager.DetachTag(ctx, tagID, p.subject); err != nil {
+		err := p.manager.DetachTag(ctx, tagID, p.subject)
+		cancel()
+		if err != nil {
 			return err
 		}
 	}

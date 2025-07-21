@@ -7,6 +7,8 @@ package network
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/find"
@@ -19,7 +21,7 @@ import (
 	"github.com/vmware/terraform-provider-vsphere/vsphere/internal/helper/provider"
 )
 
-var NetworkType = []string{
+var Type = []string{
 	"Network",
 	"DistributedVirtualPortgroup",
 	"OpaqueNetwork",
@@ -107,6 +109,45 @@ func FromNameAndDVSUuid(client *govmomi.Client, name string, dc *object.Datacent
 	return nil, NotFoundError{Name: name}
 }
 
+func FromNameAndVPCId(client *govmomi.Client, name string, dc *object.Datacenter, vpcID string) (object.NetworkReference, error) {
+	ctx := context.TODO()
+	finder := find.NewFinder(client.Client, true)
+
+	// Set the datacenter
+	if dc != nil {
+		finder.SetDatacenter(dc)
+	}
+
+	// Find the network by name
+	networks, err := finder.NetworkList(ctx, name)
+	if err != nil {
+		return nil, NotFoundError{Name: name}
+	}
+	// Filter networks by additional attributes
+	for _, network := range networks {
+		path := network.GetInventoryPath()
+		pathSplit := strings.Split(path, "/")
+
+		vpcIndex := slices.Index(pathSplit, "Virtual Private Clouds")
+		// Path format is /<datacenter>/network/Virtual Private Clouds/<VPC>/<subnet> ... And could contain folders as well
+		if vpcIndex != -1 && len(pathSplit) > vpcIndex && pathSplit[vpcIndex+1] == vpcID {
+
+			if network.Reference().Type == "DistributedVirtualPortgroup" {
+				dvPortGroup := object.NewDistributedVirtualPortgroup(client.Client, network.Reference())
+				return dvPortGroup, nil
+			}
+
+			if netObj, ok := network.(*object.Network); ok {
+				if networkName, err := netObj.ObjectName(ctx); err == nil && networkName == name {
+					return network, nil
+				}
+			}
+		}
+	}
+
+	return nil, NotFoundError{Name: name}
+}
+
 func List(client *govmomi.Client) ([]*object.VmwareDistributedVirtualSwitch, error) {
 	return getSwitches(client, "/*")
 }
@@ -173,16 +214,21 @@ func FromID(client *govmomi.Client, id string) (object.NetworkReference, error) 
 		if ref.Value == id {
 			finder := find.NewFinder(client.Client, false)
 			fctx, fcancel := context.WithTimeout(context.Background(), provider.DefaultAPITimeout)
-			defer fcancel()
+
 			nref, err := finder.ObjectReference(fctx, ref)
 			if err != nil {
+				fcancel()
 				return nil, err
 			}
+
+			fcancel()
+
 			// Should be safe to return here, as we have already asserted that this type
 			// should be a NetworkReference by using ContainerView.
 			return nref.(object.NetworkReference), nil
 		}
 	}
+
 	return nil, NotFoundError{ID: id}
 }
 

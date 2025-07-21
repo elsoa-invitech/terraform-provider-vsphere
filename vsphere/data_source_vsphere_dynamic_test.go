@@ -17,6 +17,9 @@ import (
 func TestAccDataSourceVSphereDynamic_regexAndTag(t *testing.T) {
 	t.Cleanup(RunSweepers)
 	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			{
@@ -38,6 +41,9 @@ func TestAccDataSourceVSphereDynamic_regexAndTag(t *testing.T) {
 func TestAccDataSourceVSphereDynamic_multiTag(t *testing.T) {
 	t.Cleanup(RunSweepers)
 	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			{
@@ -59,6 +65,9 @@ func TestAccDataSourceVSphereDynamic_multiTag(t *testing.T) {
 func TestAccDataSourceVSphereDynamic_multiResult(t *testing.T) {
 	t.Cleanup(RunSweepers)
 	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			{
@@ -75,6 +84,9 @@ func TestAccDataSourceVSphereDynamic_multiResult(t *testing.T) {
 func TestAccDataSourceVSphereDynamic_typeFilter(t *testing.T) {
 	t.Cleanup(RunSweepers)
 	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			{
@@ -118,10 +130,10 @@ func testAccDataSourceVSphereDynamicConfigBase() string {
 
 func testAccDataSourceVSphereConfigRegexAndTag() string {
 	conf := `
-	data "vsphere_dynamic" "dyn1" {
-	 filter     = [ vsphere_tag.tag1.id ]
-	 name_regex = "dc2"
-	}
+data "vsphere_dynamic" "dyn1" {
+  filter     = [vsphere_tag.tag1.id]
+  name_regex = "dc2"
+}
 	`
 	return testhelper.CombineConfigs(
 		testAccDataSourceVSphereDynamicConfigBase(),
@@ -132,10 +144,10 @@ func testAccDataSourceVSphereConfigRegexAndTag() string {
 
 func testAccDataSourceVSphereConfigMultiTag() string {
 	conf := `
-	data "vsphere_dynamic" "dyn2" {
-	  filter     = [ vsphere_tag.tag1.id, vsphere_tag.tag2.id ]
-	  name_regex = ""
-	}
+data "vsphere_dynamic" "dyn2" {
+  filter     = [vsphere_tag.tag1.id, vsphere_tag.tag2.id]
+  name_regex = ""
+}
 	`
 	return testhelper.CombineConfigs(
 		testAccDataSourceVSphereDynamicConfigBase(),
@@ -146,10 +158,10 @@ func testAccDataSourceVSphereConfigMultiTag() string {
 
 func testAccDataSourceVSphereConfigMultiMatch() string {
 	conf := `
-	data "vsphere_dynamic" "dyn3" {
-	  filter     = [ vsphere_tag.tag1.id ]
-	  name_regex = ""
-	}
+data "vsphere_dynamic" "dyn3" {
+  filter     = [vsphere_tag.tag1.id]
+  name_regex = ""
+}
 	`
 	return testhelper.CombineConfigs(
 		testAccDataSourceVSphereDynamicConfigBase(),
@@ -160,11 +172,11 @@ func testAccDataSourceVSphereConfigMultiMatch() string {
 
 func testAccDataSourceVSphereConfigType() string {
 	conf := `
-	data "vsphere_dynamic" "dyn4" {
-	 filter     = [ vsphere_tag.tag1.id, vsphere_tag.tag2.id ]
-	 name_regex = ""
-	 type       = "Datacenter"
-	}
+data "vsphere_dynamic" "dyn4" {
+  filter     = [vsphere_tag.tag1.id, vsphere_tag.tag2.id]
+  name_regex = ""
+  type       = "Datacenter"
+}
 	`
 	return testhelper.CombineConfigs(
 		testAccDataSourceVSphereDynamicConfigBase(),

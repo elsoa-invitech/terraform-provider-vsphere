@@ -768,9 +768,9 @@ func ReadSCSIBusSharing(l object.VirtualDeviceList, count int) string {
 	if len(ctlrs) == 0 || ctlrs[0] == nil {
 		return subresourceControllerSharingUnknown
 	}
-	last := ctlrs[0].(types.BaseVirtualSCSIController).GetVirtualSCSIController().SharedBus
+	last := ctlrs[0].GetVirtualSCSIController().SharedBus
 	for _, ctlr := range ctlrs[1:] {
-		if ctlr == nil || ctlr.(types.BaseVirtualSCSIController).GetVirtualSCSIController().SharedBus != last {
+		if ctlr == nil || ctlr.GetVirtualSCSIController().SharedBus != last {
 			return subresourceControllerSharingMixed
 		}
 	}
@@ -1150,4 +1150,55 @@ func PciPassthroughPostCloneOperation(d *schema.ResourceData, c *govmomi.Client,
 		return nil, nil, err
 	}
 	return applyConfig.VirtualDevice, applyConfig.Spec, nil
+}
+
+func VtpmApplyOperation(d *schema.ResourceData, l object.VirtualDeviceList) (object.VirtualDeviceList, []types.BaseVirtualDeviceConfigSpec, error) {
+	vtpmConfigRaw := d.Get("vtpm")
+	vtpmConfig := vtpmConfigRaw.([]interface{})
+
+	// There can only be one TPM module per virtual machine
+	// so we only expect 1 element in this slice at the most
+	vtpmDevices := l.Select(func(device types.BaseVirtualDevice) bool {
+		if _, ok := device.(*types.VirtualTPM); ok {
+			return true
+		}
+		return false
+	})
+
+	var specs []types.BaseVirtualDeviceConfigSpec
+
+	if len(vtpmDevices) > len(vtpmConfig) {
+		// delete device
+		spec := &types.VirtualDeviceConfigSpec{
+			Operation: types.VirtualDeviceConfigSpecOperationRemove,
+			Device: &types.VirtualTPM{
+				VirtualDevice: types.VirtualDevice{
+					Key: vtpmDevices[0].GetVirtualDevice().Key,
+				},
+			},
+		}
+
+		specs = append(specs, spec)
+	}
+
+	if len(vtpmConfig) > len(vtpmDevices) {
+		// create device
+		spec := &types.VirtualDeviceConfigSpec{
+			Operation: types.VirtualDeviceConfigSpecOperationAdd,
+			Device: &types.VirtualTPM{
+				VirtualDevice: types.VirtualDevice{
+					Key: -1,
+				},
+			},
+		}
+
+		specs = append(specs, spec)
+	}
+
+	if len(specs) > 0 {
+		_ = d.Set("reboot_required", true)
+	}
+
+	l = applyDeviceChange(l, specs)
+	return l, specs, nil
 }
