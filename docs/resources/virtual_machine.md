@@ -240,8 +240,7 @@ data "vsphere_network" "network" {
 resource "vsphere_virtual_machine" "vmFromRemoteOvf" {
   name             = "remote-foo"
   datacenter_id    = data.vsphere_datacenter.datacenter.id
-  datastore_id     = data.vsphere_datastore.datastore.id
-  host_system_id   = data.vsphere_host.host.id
+  datastore_id     = data.vsphere_datastore.datastore.i
   resource_pool_id = data.vsphere_resource_pool.default.id
 
   wait_for_guest_net_timeout = 0
@@ -278,7 +277,6 @@ resource "vsphere_virtual_machine" "vmFromLocalOvf" {
   name             = "local-foo"
   datacenter_id    = data.vsphere_datacenter.datacenter.id
   datastore_id     = data.vsphere_datastore.datastore.id
-  host_system_id   = data.vsphere_host.host.id
   resource_pool_id = data.vsphere_resource_pool.default.id
 
   wait_for_guest_net_timeout = 0
@@ -353,7 +351,6 @@ data "vsphere_ovf_vm_template" "ovfRemote" {
   disk_provisioning = "thin"
   resource_pool_id  = data.vsphere_resource_pool.default.id
   datastore_id      = data.vsphere_datastore.datastore.id
-  host_system_id    = data.vsphere_host.host.id
   remote_ovf_url    = "https://cloud-images.ubuntu.com/releases/xx.xx/release/ubuntu-xx.xx-server-cloudimg-amd64.ova"
   ovf_network_map = {
     "VM Network" : data.vsphere_network.network.id
@@ -366,7 +363,6 @@ data "vsphere_ovf_vm_template" "ovfLocal" {
   disk_provisioning = "thin"
   resource_pool_id  = data.vsphere_resource_pool.default.id
   datastore_id      = data.vsphere_datastore.datastore.id
-  host_system_id    = data.vsphere_host.host.id
   local_ovf_path    = "/Volume/Storage/OVA/ubuntu-xx-xx-server-cloudimg-amd64.ova"
   ovf_network_map = {
     "VM Network" : data.vsphere_network.network.id
@@ -378,7 +374,6 @@ resource "vsphere_virtual_machine" "vmFromRemoteOvf" {
   name                 = "ubuntu-server-cloud-image-01"
   datacenter_id        = data.vsphere_datacenter.datacenter.id
   datastore_id         = data.vsphere_datastore.datastore.id
-  host_system_id       = data.vsphere_host.host.id
   resource_pool_id     = data.vsphere_resource_pool.default.id
   num_cpus             = data.vsphere_ovf_vm_template.ovfRemote.num_cpus
   num_cores_per_socket = data.vsphere_ovf_vm_template.ovfRemote.num_cores_per_socket
@@ -435,7 +430,6 @@ resource "vsphere_virtual_machine" "vmFromLocalOvf" {
   name                 = "ubuntu-server-cloud-image-02"
   datacenter_id        = data.vsphere_datacenter.datacenter.id
   datastore_id         = data.vsphere_datastore.datastore.id
-  host_system_id       = data.vsphere_host.host.id
   resource_pool_id     = data.vsphere_resource_pool.default.id
   num_cpus             = data.vsphere_ovf_vm_template.ovfLocal.num_cpus
   num_cores_per_socket = data.vsphere_ovf_vm_template.ovfLocal.num_cores_per_socket
@@ -671,7 +665,7 @@ The following options are general virtual machine and provider workflow options:
   $osDescriptor | Select-Object Id, Fullname
   ```
 
-* `hardware_version` - (Optional) The hardware version number. Valid range is from 4 to 21. The hardware version cannot be downgraded. See virtual machine hardware [versions][virtual-machine-hardware-versions] and [compatibility][virtual-machine-hardware-compatibility] for more information on supported settings.
+* `hardware_version` - (Optional) The hardware version number. Allows versions within ranges: 4, 7-11, 13-15, 17-22. The hardware version cannot be downgraded. See virtual machine hardware [versions][virtual-machine-hardware-versions] and [compatibility][virtual-machine-hardware-compatibility] for more information on supported settings.
 
 [virtual-machine-hardware-versions]: https://knowledge.broadcom.com/external/article?articleNumber=315655
 [virtual-machine-hardware-compatibility]: https://knowledge.broadcom.com/external/article?articleNumber=312100
@@ -1409,11 +1403,10 @@ The options available in the `ovf_deploy` block are:
 
 * `ip_protocol` - (Optional) The IP protocol.
 
-* `disk_provisioning` - (Optional) The disk provisioning type. If set, all the disks included in the OVF/OVA will have the same specified policy. One of `thin`, `thick`, `eagerZeroedThick`, or `sameAsSource`.
+* `disk_provisioning` - (Optional) The disk provisioning type. If set, all the disks included in the OVF/OVA will have the same specified policy. One of `thin`, `thick`, or `eagerZeroedThick`.
   * `thin`: Each disk is allocated and zeroed on demand as the space is used.
   * `thick`: Each disk is allocated at creation time and the space is zeroed on demand as the space is used.
   * `eagerZeroedThick`: Each disk is allocated and zeroed at creation time.
-  * `sameAsSource`: Each disk will have the same disk type as the source.
 
 * `deployment_option` - (Optional) The key for the deployment option. If empty, the default option is selected.
 
